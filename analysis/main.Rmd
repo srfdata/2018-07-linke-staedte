@@ -1,0 +1,2292 @@
+---
+title: "Linksrutsch in Schweizer Städten"
+author: "SRF Data, Pascal Burkhard (pascal.burkhard@srf.ch)"
+date: "Juli 2018"
+output:
+  html_document:
+    code_folding: show
+    echo: TRUE
+    warning: FALSE
+    message: FALSE
+    theme: simplex
+    df_print: kable
+    toc: yes
+    toc_depth: 4
+    toc_float: 
+      collapsed: false
+      smooth_scroll: false
+subtitle: Vorprozessierung und Analyse
+---
+
+```{r, echo=FALSE}
+project_name <- "2018-07-linke-staedte"
+r_version <- "3.4.4"
+```
+
+## Vorbemerkungen
+
+Dieses Dokument beschreibt die Vorprozessierung und explorative Analyse des Datensatzes, der Grundlage des auf srf.ch veröffentlichten Artikel [So stark rückten die Schweizer Städte nach links](https://www.srf.ch/news/schweiz/urbaner-linksrutsch-so-stark-rueckten-die-schweizer-staedte-nach-links) ist.
+
+SRF Data legt Wert darauf, dass die Datenvorprozessierung und -Analyse nachvollzogen und überprüft werden kann. SRF Data glaubt an das Prinzip offener Daten, aber auch offener und nachvollziehbarer Methoden. Zum anderen soll es Dritten ermöglicht werden, auf dieser Vorarbeit aufzubauen und damit weitere Auswertungen oder Applikationen zu generieren.  
+2018-07-linke-staedte
+Für die vorliegende Analyse erhielt SRF Data vom [Schweizer Städteverband](https://staedteverband.ch/) Daten zur Sitzverteilung in den Exekutiven und Legislativen der grossen Schweizer Städte. In diesem Script werden diese Daten zusammengeführt und entlang folgender Fragestellung ausgewertet: "Wie verschob sich das politische Kräfteverhältnis in den grossen Schweizer Städten in den vergangenen 25 Jahren?".
+
+Die Endprodukte des vorliegenden Scripts, neben der vorliegenden explorativen Analyse, sind (Datenbeschreibung siehe unten):
+
+* `data_ex.Rda`: Ein Datensatz mit der Sitzerverteilung in der Exekutive der grossen Schweizer Städte für die Jahr 1993 bis 2017. Für die zehn grössten Städte sind auch Daten für das Jahr 2018 enthalten.
+* `data_leg.Rda`: Ein Datensatz mit der Sitzerverteilung in der Legislative der grossen Schweizer Städte für die Jahr 1993 bis 2017. Für die zehn grössten Städte sind auch Daten für das Jahr 2018 enthalten.
+* diverse Visualisierungen
+
+### R-Script & Daten
+
+Die Vorprozessierung und Analyse wurde im Statistikprogramm R vorgenommen. Das zugrunde liegende Script sowie die prozessierten Daten können unter [diesem Link](https://srfdata.github.io/`r project_name`/rscript.zip) heruntergeladen werden. Durch Ausführen von `main.Rmd` kann der hier beschriebene Prozess nachvollzogen und der für den Artikel verwendete Datensatz generiert werden. Dabei werden Daten aus dem Ordner `input` eingelesen und Ergebnisse in den Ordner `output` geschrieben. 
+
+Verwendet wird **R Version `r r_version`**. Wenn der Code nicht funktioniert, könnte es daran liegen, dass die installierte R Version eine ältere ist und deshalb aus Kompatibilitätsgründen ältere Packages installiert werden, als die von uns verwendeten. Manchmal hilft es, das Skript mehrmals auszuführen, wenn ein Fehler auftritt. Besonders bei Package-Installationsproblemen kann es helfen, die R-Session mehrmals neuzustarten und den Code nochmals auszuführen. Allenfalls müssen noch Third-Party-Libraries wie z.B. `libgdal-dev` installiert werden.
+
+### GitHub
+
+Der Code für die vorliegende Datenprozessierung ist auf [https://github.com/srfdata/`r project_name`](https://github.com/srfdata/`r project_name`) zur freien Verwendung verfügbar. 
+
+### Lizenz
+
+<a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/"><img alt="Creative Commons Lizenzvertrag" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" href="http://purl.org/dc/dcmitype/Dataset" property="dct:title" rel="dct:type">`r project_name`</span> von <a xmlns:cc="http://creativecommons.org/ns#" href="https://github.com/srfdata/`r project_name`" property="cc:attributionName" rel="cc:attributionURL">SRF Data</a> ist lizenziert unter einer <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Namensnennung - Weitergabe unter gleichen Bedingungen 4.0 International Lizenz</a>.
+
+### Weitere Projekte
+
+Code & Daten von [SRF Data](http://srf.ch/data) sind unter [http://srfdata.github.io](http://srfdata.github.io) verfügbar.
+
+### Haftungsausschluss
+
+Die veröffentlichten Informationen sind sorgfältig zusammengestellt, erheben aber keinen Anspruch auf Aktualität, Vollständigkeit oder Richtigkeit. Es wird keine Haftung übernommen für Schäden, die  durch die Verwendung dieses Scripts oder der daraus gezogenen Informationen entstehen. Dies gilt ebenfalls für Inhalte Dritter, die über dieses Angebot zugänglich sind.
+
+
+### Originalquelle
+
+Originalquelle sind Daten, die der [Schweizer Städteverband](https://staedteverband.ch/) SRF Data zur Verfügung stellte. Die Daten umfassen die Sitzverteilungen in den Exekutiven und Legislativen grosser Schweizer Städte für die Jahre 1993 bis 2017.
+
+
+## Vorbereitungen
+
+```{r preparations, echo=FALSE}
+detach_all_packages <- function() {
+  basic_packages_blank <- c(
+    "stats",
+    "graphics",
+    "grDevices",
+    "utils",
+    "datasets",
+    "methods",
+    "base"
+  )
+  basic_packages <- paste("package:", basic_packages_blank, sep = "")
+
+  package_list <- search()[
+    ifelse(unlist(gregexpr("package:", search())) == 1, TRUE, FALSE)
+  ]
+
+  package_list <- setdiff(package_list, basic_packages)
+
+  if (length(package_list) > 0) {
+    for (package in package_list) {
+      detach(package, character.only = TRUE, unload = TRUE)
+      print(paste("package ", package, " detached", sep = ""))
+    }
+  }
+}
+
+detach_all_packages()
+source("scripts/csf.R")
+path_to_wd <- csf() # if this - for some reason - does not work,
+# replace with a hardcoded path, like so: "~/projects/rddj-template/analysis/"
+if (is.null(path_to_wd) | !dir.exists(path_to_wd)) {
+  stop("No working directory specified for current user")
+} else {
+  setwd(path_to_wd)
+}
+
+# E-Notation unterdrücken
+options(scipen = 999)
+```
+
+
+### Packages definieren
+
+```{r define packages}
+# von https://mran.revolutionanalytics.com/web/packages/checkpoint/vignettes/using-checkpoint-with-knitr.html
+# alle Packages, die nicht gebraucht werden,
+# können hier entfernt werden (auskommentieren reicht nicht!)
+# Wichtig: wenn neues Package installiert werden soll,
+# scanForPackages = T setzen im checkpoint() call im nächsten Chunk
+cat(
+  "
+library(rstudioapi)
+library(tidyverse) # ggplot2, dplyr, tidyr, readr, purrr, tibble
+library(magrittr) # pipes
+library(stringr) # string manipulation
+library(readxl) # excel
+library(scales) # scales for ggplot2
+library(jsonlite) # json
+library(forcats) # easier factor handling,
+library(lintr) # code linting, auf keinen Fall entfernen ;-)
+library(sp) # spatial data handling
+library(rgeos) # spatial data handling
+library(rgdal) # spatial data handling
+library(styler) # code formatting
+library(googlesheets) # googlesheets (replace with tidyverse/googlesheets4 asap)
+library(rmarkdown) # muss für automatisches knitting 
+# in deploy.sh eingebunden werden",
+  file = "manifest.R"
+)
+package_date <- "2018-01-01"
+```
+
+### Packages installieren
+
+```{r install packages}
+if (!require(checkpoint)) {
+  if (!require(devtools)) {
+    install.packages("devtools", repos = "http://cran.us.r-project.org")
+    require(devtools)
+  }
+  devtools::install_github(
+    "checkpoint",
+    username = "RevolutionAnalytics",
+    ref = "v0.3.2",
+    repos = "http://cran.us.r-project.org"
+  )
+  require(checkpoint)
+}
+# nolint start
+if (!dir.exists("~/.checkpoint")) {
+  dir.create("~/.checkpoint")
+}
+# nolint end
+checkpoint(
+  snapshotDate = package_date,
+  project = path_to_wd,
+  verbose = T,
+  scanForPackages = T, # hier ggf. auf F setzen, um Wartezeit zu verkürzen
+  use.knitr = F
+  # R.version = r_version
+) # wenn eine "ähnliche" Version von R
+# installiert ist (3.4.x in diesem Fall), kann dieses
+# Argument hier entfernt und die vorhandene R-Version
+# verwendet werden - vorausgesetzt, die hier verwendeten
+# Packages funktionieren mit dieser.
+rm(package_date, r_version)
+```
+
+
+### Packages laden
+
+```{r load packages}
+source("manifest.R")
+unlink("manifest.R")
+sessionInfo()
+rm(list = ls(all.names = TRUE))
+```
+
+### Zusätzliche Scripts laden
+
+```{r load scripts}
+# falls Logik auf andere Scripts ausgelagert werden soll (z.B. der Übersichtlichkeit halber), hier einkommentieren
+knitr::read_chunk("scripts/my_script.R")
+source("scripts/my_script.R")
+```
+
+
+
+# Exekutive
+
+### Daten einlesen
+
+Es wird ein Datensatz namens "data_ex_raw" erstellt, der die (ungesäuberten) Rohdaten für die Stadtregierungen (Exekutive) beinhaltet. Der Datensatz wird anschliessend im Ordner "Output" als Rda gespeichert. 
+
+```{r}
+amt <- "Exekutive"
+data_ex_raw <- data.frame()
+
+### Datenstruktur 1: 1993-1997, 1999
+temp <- c(1993:1997, 1999)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("B11", 
+                     dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 4, 7, 9, 11, 13, 15, 17, 19, 21:23, 25) %>%
+    filter(!is.na(Alle) &
+      !X__1 == "davon Frauen" &
+      !X__1 == "dont femmes") %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+
+### Datenstruktur 2: 1998
+temp <- c(1998)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("B11", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 4, 7, 9, 11, 13,15,17,19,21:23) %>%
+        filter(!is.na(Alle) &
+      !X__1 == "davon Frauen" &
+      !X__1 == "dont femmes") %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+
+### Datenstruktur 3: 2000
+temp <- c(2000)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A5", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23) %>%
+    filter(!is.na(Alle) &
+      !X__1 == "davon Frauen" &
+      !X__1 == "dont femmes") %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 4: 2001-2004
+temp <- c(2001:2004)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("B11", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 4, 7, 9, 11, 13, 15, 17, 19:21, 23) %>%
+    filter(!is.na(Alle) &
+      !X__1 == "davon Frauen" &
+      !X__1 == "dont femmes") %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 5: 2005-2008
+temp <- c(2005:2008)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 3,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 2, 6, 8, 10, 12, 14, 16, 18, 20) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRD",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      LPS = "LPS / PLS",
+      EVP = "EVP / PEP",
+      GPS = "GPS / PES",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 6: 2009
+temp <- c(2009)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 3,
+    range = anchored("A9", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 2, 6, 8, 10, 12, 14, 16, 18, 20, 22) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRL",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 7: 2010-2012, 2014
+temp <- c(2010:2012, 2014)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 3,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 2, 6, 8, 10, 12, 14, 16, 18, 20, 22) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRD",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 8: 2013
+temp <- c(2013)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A1", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 2, 6, 8, 10, 12, 14, 16, 18, 20, 22) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRD",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 9: 2015
+temp <- c(2015)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 3,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 2, 6, 8, 10, 12, 14, 16, 18, 20) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRD",
+      CVP = "CVP / PDC",
+      SPS = "SP / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEV",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 10: 2016-2017
+temp <- c(2016:2018)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A3", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1, 2, 6, 8, 10, 12, 14, 16, 18, 20) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PLR",
+      CVP = "CVP / PDC",
+      SPS = "SP / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEV",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL"
+    ) %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_ex_raw %<>%
+    bind_rows(loop)
+}
+if (!dir.exists("output")) {
+  dir.create("output")
+}
+save(data_ex_raw, file = "output/data_ex_raw.Rda")
+rm(loop)
+```
+
+
+### Daten säubern
+
+Es wird ein Datensatz namens "data_ex" erstellt, der die gesäuberten Daten für die Stadtregierungen (Exekutive) beinhaltet. Zudem wird für jede Stadt die Population als Variable hinzugefügt. Der Datensatz wird anschliessend im Ordner "Output" als Rda gespeichert. 
+
+```{r}
+load("output/data_ex_raw.Rda")
+
+# Bereich auswählen und Variable benennen
+data_ex <- data_ex_raw %>%
+  select(14, 1, 15, 2:13, 17, 16:20) %>%
+  rename(city = X__1)
+
+# Base version:
+data_ex[data_ex == "-"] <- 0
+data_ex[data_ex == "–"] <- 0
+data_ex[is.na(data_ex)] <- 0
+data_ex[data_ex == "…"] <- 0
+data_ex[data_ex == ""] <- 0
+
+# Fussnoten entfernen
+data_ex %<>%
+  mutate(
+    FDP = str_replace_all(FDP, " #[^[:alpha:]]+", " "),
+    CVP = str_replace_all(CVP, " #[^[:alpha:]]+", " "),
+    SPS = str_replace_all(SPS, " #[^[:alpha:]]+", " "),
+    SVP = str_replace_all(SVP, " #[^[:alpha:]]+", " "),
+    LDU = str_replace_all(LDU, " #[^[:alpha:]]+", " "),
+    LPS = str_replace_all(LPS, " #[^[:alpha:]]+", " "),
+    EVP = str_replace_all(EVP, " #[^[:alpha:]]+", " "),
+    SD = str_replace_all(SD, " #[^[:alpha:]]+", " "),
+    GPS = str_replace_all(GPS, " #[^[:alpha:]]+", " "),
+    FPS = str_replace_all(FPS, " #[^[:alpha:]]+", " "),
+    BDP = str_replace_all(BDP, " #[^[:alpha:]]+", " "),
+    GLP = str_replace_all(GLP, " #[^[:alpha:]]+", " "),
+    other = str_replace_all(other, " #[^[:alpha:]]+", " "),
+    Alle = str_replace_all(Alle, " #[^[:alpha:]]+", " "),
+    city = str_replace_all(city, " ", ""),
+    city = str_replace_all(city, "#[^[:alpha:]]+", ""),
+    city = str_replace_all(city, "([^[:alpha:]])", "")
+  )
+
+# Schreibweise vereinheitlichen
+data_ex %<>%
+  mutate(city = str_replace_all(city, "[^[:alpha:]]", " "))
+
+# Ersetze Namen in einer Funktion
+beautify_municipality_names <- function(df) {
+  df %>% mutate(
+    # Aesch (BL)
+    city = str_replace_all(city,
+                           "AeschBL",
+                           "Aesch (BL)"),
+    # Affoltern am Albis
+    city = str_replace_all(city,
+                           "AffolternaA|AffolternamAlbis",
+                           "Affoltern am Albis"),
+    # Altdorf (UR)
+    city = str_replace_all(city,
+                           "AltdorfUR",
+                           "Altdorf (UR)"),
+    # Altstätten
+    city = str_replace_all(city,
+                           "AltstΣtten",
+                           "Altstätten"),
+    # Basel
+    city = str_replace_all(city,
+                           "BaselStadtkanton",
+                           "Basel"),
+    # Biel/Bienne
+    city = str_replace_all(city,
+                           "^Biel$|BielBienne",
+                           "Biel/Bienne"),
+    # Brig-Glis
+    city = str_replace_all(city,
+                           "BrigGlis",
+                           "Brig-Glis"),
+    # Buchs (SG)
+    city = str_replace_all(city,
+                           "BuchsSG",
+                           "Buchs (SG)"),
+    # Bülach
+    city = str_replace_all(city,
+                           "Bⁿlach",
+                           "Bülach"),
+    # Bussigny
+    city = str_replace_all(city,
+                           "BussignyprèsLausanne",
+                           "Bussigny"),
+    # Carouge
+    city = str_replace_all(city,
+                           "^Carouge$|CarougeGE",
+                           "Carouge (GE)"),
+    # Chêne-Bougeries
+    city = str_replace_all(city,
+                           "ChêneBougeries",
+                           "Chêne-Bougeries"),
+    # Duebendorf
+    city = str_replace_all(city,
+                           "Dbendorf|Dⁿbendorf",
+                           "Dübendorf"),
+    # Delemont
+    city = str_replace_all(city,
+                           "DelΘmont",
+                           "Delémont"),
+    # Ecublens (VD)
+    city = str_replace_all(city,
+                           "EcublensVD",
+                           "Ecublens (VD)"),
+    # Genf
+    city = str_replace_all(city,
+                           "Genve|GenΦve",
+                           "Genève"),
+    # Gossau (SG)
+    city = str_replace_all(city,
+                           "GossauSG",
+                           "Gossau (SG)"),
+    # Glarus
+    city = str_replace_all(city,
+                           "GlarusNord",
+                           "Glarus"),
+    # Illnau-Effretikon
+    city = str_replace_all(city,
+                           "IllnauEffretikon",
+                           "Illnau-Effretikon"),
+    # Kniz
+    city = str_replace_all(city,
+                           "Kniz",
+                           "Köniz"),
+    # Küsnacht (ZH)
+    city = str_replace_all(city,
+                           "^Küsnacht$|Kⁿsnacht|KüsnachtZH",
+                           "Küsnacht (ZH)"),
+    # Küssnacht (SZ)
+    city = str_replace_all(city,
+                           "KüssnachtSZ|KüssnachtAR",
+                           "Küssnacht (SZ)"),
+    # La Chaux-de-Fonds
+    city = str_replace_all(city,
+                           "ChauxdeFondsLa|LaChauxdeFonds",
+                           "La Chaux-de-Fonds"),
+    # La Tour-de-Peilz
+    city = str_replace_all(city,
+                           "LaTourdePeilz",
+                           "La Tour-de-Peilz"),
+    # Le Grand-Saconnex
+    city = str_replace_all(city,
+                           "LeGrandSaconnex",
+                           "Le Grand-Saconnex"),
+    # La Neuveville
+    city = str_replace_all(city,
+                           "NeuvevilleLa|LaNeuveville",
+                           "La Neuveville"),
+    # Oberwil (BL)
+    city = str_replace_all(city,
+                           "OberwilBL",
+                           "Oberwil (BL)"),
+    # La Tour-de-Peilz
+    city = str_replace_all(city,
+                           "TourdePeilzLa",
+                           "La Tour-de-Peilz"),
+    # LeGrandSaconnex
+    city = str_replace_all(city,
+                           "GrandSaconnexLe",
+                           "Le Grand-Saconnex"),
+    # Le Locle
+    city = str_replace_all(city,
+                           "LocleLe|LeLocle",
+                           "Le Locle"),
+    # Littau gehört seit 2009 zu Luzern und wird ignoriert
+    # Münchenstein
+    city = str_replace_all(city,
+                           "Mⁿnchenstein",
+                           "Münchenstein"),
+    # Münsingen
+    city = str_replace_all(city,
+                           "Mⁿnsingen",
+                           "Münsingen"),
+    # Muri bei Bern
+    city = str_replace_all(city,
+                           "MuriBE|MuribeiBern",
+                           "Muri bei Bern"),
+    # Neuchâtel
+    city = str_replace_all(city,
+                           "Neuchtel|NeuchΓtel",
+                           "Neuchâtel"),
+    # Neuhausen am Rheinfall
+    city = str_replace_all(city,
+                           "NeuhausenaRheinfall|NeuhausenamRheinfall",
+                           "Neuhausen am Rheinfall"),
+    # Plan-les-Ouates
+    city = str_replace_all(city,
+                           "PlanlesOuates",
+                           "Plan-les-Ouates"),
+    # Rapperswil-Jona entstand 2007 aus Rapperswil und Jona, welches rund 
+    # doppelt so gross war. Was machen wir also vor 2006? Wir lassen die
+    # Frage für den Moment unbeantwortet, da wir es nicht genauer ansehen
+    city = str_replace_all(city,
+                           "RapperswilJona",
+                           "Rapperswil-Jona"),
+    # Reinach (BL)
+    city = str_replace_all(city,
+                           "ReinachBL",
+                           "Reinach (BL)"),
+    # Renens (VD)
+    city = str_replace_all(city,
+                           "^Renens$|RenensVD",
+                           "Renens (VD)"),
+    # Rüti (ZH)
+    city = str_replace_all(city,
+                           "RütiZH|RⁿtiZH",
+                           "Rüti (ZH)"),
+    # St. Gallen
+    city = str_replace_all(city,
+                           "StGallen",
+                           "St. Gallen"),
+    # St. Moritz
+    city = str_replace_all(city,
+                           "StMoritz",
+                           "St. Moritz"),
+    # Stäfa
+    city = str_replace_all(city,
+                           "StΣfa",
+                           "Stäfa"),
+    # Thônex
+    city = str_replace_all(city,
+                           "Thnex",
+                           "Thônex"),
+    # Val-de-Ruz
+    city = str_replace_all(city,
+                           "ValdeRuz",
+                           "Val-de-Ruz"),
+    # Val-de-Travers
+    city = str_replace_all(city,
+                           "ValdeTravers",
+                           "Val-de-Travers"),
+    # Villars-sur-Glâne
+    city = str_replace_all(city,
+                           "VillarssurGlâne",
+                           "Villars-sur-Glâne"),
+    # Wädenswil
+    city = str_replace_all(city,
+                           "WΣdenswil",
+                           "Wädenswil"),
+    # Wetzikon (ZH)
+    city = str_replace_all(city,
+                           "WetzikonZH",
+                           "Wetzikon (ZH)"),
+    # Wil (SG)
+    city = str_replace_all(city,
+                           "WilSG",
+                           "Wil (SG)"),
+    # Wohlen (AG)
+    city = str_replace_all(city,
+                           "WohlenAG",
+                           "Wohlen (AG)"),
+    # Yverdon-les-Bains
+    city = str_replace_all(city,
+                           "YverdonlesBains",
+                           "Yverdon-les-Bains"),
+    # Zürich
+    city = str_replace_all(city,
+                           "[[:cntrl:]]Zürich",
+                           "Zürich"),
+    city = str_replace_all(city,
+                           "Zrich|Zⁿrich",
+                           "Zürich")
+  )
+}
+
+# Funktion anwenden
+data_ex %<>%
+  beautify_municipality_names()
+
+# Übrige berechnen
+data_ex %<>%
+  mutate(others = as.numeric(.[[15]]) + 
+           as.numeric(.[[16]]) + 
+           as.numeric(.[[18]]), 
+         na.rm = TRUE) %>%
+  select(1:14, 17, 19:21)
+
+# Summe überprüfen
+data_ex %<>%
+  mutate(all = as.numeric(FDP) +
+    as.numeric(CVP) +
+    as.numeric(SPS) +
+    as.numeric(SVP) +
+    as.numeric(LDU) +
+    as.numeric(LPS) +
+    as.numeric(EVP) +
+    as.numeric(SD) +
+    as.numeric(PDA) +
+    as.numeric(GPS) +
+    as.numeric(FPS) +
+    as.numeric(BDP) +
+    as.numeric(GLP) +
+    as.numeric(others)) %>%
+  mutate(diff = as.numeric(Alle) - all,
+         others = others + diff) %>%
+  select(-diff, -all) %>%
+  filter(!Alle == 0)
+
+data_ex %<>% 
+  filter(!city == "AlleTous",
+         !city == "SchweizSuisse")
+
+save(data_ex, file = "output/data_ex.Rda")
+
+load("output/data_ex.Rda")
+
+bfs_municipalities <- read_excel(
+  "input/su-d-01.02.03.06.xlsx",
+  sheet = "2016",
+  skip = 2
+) %>%
+  select(id_and_name = Region, population = Total) %>%
+  # behalte nur Gemeinden, nicht Bezirke / Kantone
+  filter(str_detect(id_and_name, "^\\.\\.\\.")) %>%
+  # separiere Gemeinde ID und Name
+  rowwise() %>%
+  mutate(
+    bfs_id = str_extract(id_and_name, "^\\.*\\d{4}"),
+    # entferne Punkte und konvertiere in Zahl
+    bfs_id = as.numeric(str_replace(bfs_id, "^\\.*", "")),
+    name = str_replace(id_and_name, "^\\.*\\d{4} ", "")
+  ) %>%
+  select(-id_and_name)
+
+# Daten um Anzahl Einwohner ergänzen
+data_ex %<>%
+  left_join(bfs_municipalities, by = c("city" = "name"))
+
+```
+
+Die folgenden Gemeinden fallen raus, weil sie fusioniert haben:
+
+```{r}
+
+# Welche Städte konnten nicht zugeordnet werden?
+knitr::kable(
+  data_ex %>%
+    filter(is.na(bfs_id)) %>%
+    distinct(city)
+)
+
+# Entferne diese
+data_ex %<>%
+  filter(!is.na(bfs_id)) %>%
+  arrange(desc(population, year))
+
+```
+
+### Vollständigkeit visualisieren
+
+In den nachfolgenden Plots wird der Übersicht halber die Vollständigkeit des Datensatzes visualisiert.
+
+```{r get an overview of the data integrity, fig.width = 5, fig.height = 11}
+
+order <- data_ex %>%
+  distinct(city) %>%
+  unlist()
+
+
+ggplot(
+  data_ex %>%
+    mutate(city = factor(city, levels = rev(order))),
+  aes(
+    x = year,
+    y = city
+  )
+) +
+  geom_point(color = "#1c9621") +
+  scale_x_continuous(breaks = c(1998, 2005, 2015)) +
+  theme(axis.text.y = element_text(size = 6))
+
+```
+
+#### Aargau Solothurn
+
+```{r integrity aargau solothurn, fig.width = 5, fig.height = 3}
+
+# erstelle Tabelle mit BFS IDs und Kantonszugehörigkeit
+cantons_lookup <- read_excel(
+  "input/be-b-00.04-rgs-16.xls",
+  sheet = "01.01.2016",
+  skip = 16,
+  col_names = FALSE
+) %>%
+  select(bfs_id = X__1, canton_id = X__3)
+
+# Weil wir im oberen Data Frame nur eine ID haben, müssen wir noch die Namen
+# aus dem zweiten Tabellenblatt einlesen
+canton_names <- read_excel(
+  "input/be-b-00.04-rgs-16.xls",
+  sheet = "Synopsis_de",
+  range = "C4:D29",
+  col_names = FALSE
+) %>%
+  select(canton_id = X__1, canton = X__2)
+
+# Hole Kantonsnamen rein via ID
+cantons_lookup %<>%
+  left_join(canton_names, by = "canton_id") %>%
+  select(-canton_id)
+
+# aufräumen
+rm(canton_names)
+
+# erstelle Data Frame mit Gemeinden in AG/SO
+data_ag_so <- data_ex %>%
+  left_join(cantons_lookup, by = "bfs_id") %>%
+  filter(canton == "Aargau" | canton == "Solothurn") %>%
+  arrange(desc(population), year)
+
+order_ag_so <- data_ag_so %>%
+  distinct(city) %>%
+  unlist()
+
+ggplot(
+  data_ag_so %>%
+    mutate(city = factor(city, levels = rev(order_ag_so))),
+  aes(
+    x = year,
+    y = city
+  )
+) +
+  geom_point(color = "#1c9621", size = 4) +
+  scale_x_continuous(breaks = c(1998, 2005, 2015)) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Gemeinden in den Kantonen Aargau / Solothurn"
+  )
+
+# speichere für später Liste mit relevanten! Gemeinden (mit ausreichend Daten)
+order_ag_so <- data_ag_so %>%
+  filter(year == 2003) %>%
+  distinct(city) %>%
+  unlist()
+
+```
+
+```{r zurich schaffhausen, fig.width = 6, fig.height = 6}
+
+ggplot(
+  data_ex %>%
+    left_join(cantons_lookup, by = "bfs_id") %>%
+    mutate(city = factor(city, levels = rev(order))) %>%
+    filter(canton == "Zürich" | canton == "Schaffhausen"),
+  aes(
+    x = year,
+    y = city
+  )
+) +
+  geom_point(color = "#1c9621", size = 4) +
+  scale_x_continuous(breaks = c(1998, 2005, 2015)) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Gemeinden in den Kantonen Zürich / Schaffhausen"
+  )
+
+
+```
+
+
+### Plots vorbereiten
+
+Die Daten werden für die Plots vorbereitet. U.a. werden die einzelnen Parteien einem Lager (Links, Rechts, Mitte) zugeteilt. Der Datensatz wird anschliessend im Ordner "Output" als "data_ex_plot.Rda" gespeichert. 
+
+```{r}
+
+lager_levels <- c("Rechte", "Sonstige", "Mitte", "Linke")
+lager_colors <- c("#27A1A6", "#D9D9D9", "#B8B8B8", "#F1434A")
+
+top_50 <- bfs_municipalities %>%
+  ungroup() %>%
+  top_n(50, wt = population) %>%
+  arrange(desc(population))
+
+data_ex_plot <- data_ex
+
+# Einzelne Parteien einem politischen Lager zuordnen
+data_ex_plot %<>%
+  mutate(Linke = as.numeric(SPS)
+  + as.numeric(GPS)
+  + as.numeric(PDA)) %>%
+  mutate(Mitte = as.numeric(CVP)
+  + as.numeric(EVP)
+  + as.numeric(BDP)
+  + as.numeric(LDU)
+  + as.numeric(GLP)) %>%
+  mutate(Rechte = as.numeric(SVP)
+  + as.numeric(FDP)
+  + as.numeric(LPS)
+  + as.numeric(FPS)
+  + as.numeric(SD)) %>%
+  mutate(Sonstige = as.numeric(Alle) - Linke - Rechte - Mitte)
+
+# Datensatz für Plot 3 speichern
+save(data_ex_plot, file = "output/data_ex_plot.Rda")
+
+```
+
+
+### Plot 1: Sitzverteilung in den 50 grössten Schweizer Städten
+
+Ein erster Plot soll zeigen, wie sich die Exekutive in den 50 grössten Schweizer Städten zwischen 1993 und 2017 zusammensetzte. 
+
+```{r}
+load("output/data_ex_plot.Rda")
+
+# Datensatz transformieren, top 50 selektieren
+data_ex_plot1 <- data_ex_plot
+
+data_ex_plot1 %<>%
+  select(year,
+         city,
+         population,
+         Alle,
+         Linke,
+         Mitte,
+         Rechte,
+         Sonstige) %>%
+  gather(
+    lager,
+    sitze,
+    Linke:Sonstige
+  )
+
+# Sitzanteile berechnen
+data_ex_plot1 %<>%
+  mutate(
+    anteil = as.numeric(sitze) / as.numeric(Alle) * 100,
+    lager = factor(lager, levels = lager_levels)
+  )
+
+# Plot generieren
+plot <- ggplot(
+  data_ex_plot1 %>%
+    filter(city %in% top_50$name),
+  aes(
+    x = year,
+    y = anteil,
+    fill = lager
+  )
+) +
+  geom_area(position = "stack") +
+  labs(x = "Jahr", 
+       y = "Anteil", 
+       title = "Exekutive: Sitzverteilung in den 50 grössten Städte\n(Kleinstparteien nicht kategorisiert)") +
+  facet_wrap(~reorder(city, -population)) +
+  scale_fill_manual(values = lager_colors) +
+  theme_minimal()
+plot
+
+# Plot speichern
+ggsave("output/plot_exekutive01.pdf", 
+       width = 10, 
+       height = 8)
+```
+
+### Plot 2: Sitzverteilung in den 10 grössten Schweizer Städten (inkl. Kleinstparteien)
+
+Weil viele kleinere Parteien (z.B. Lega) in der Kategorie "Sonstige" zusammengefasst werden, ist die Analyse noch zu unpräzise. Aus diesem Grund werden jene Kleinstparteien für die 10 grössten Städte manuell recherchiert und in einem Excel-File erfasst. Dieses File wird anschliessend eingelesen und mit den bestehenden Daten gemerged. Anschliessend wird die Entwicklung in den 10 grössten Städten als Plot ausgewiesen.
+
+```{r}
+load("output/data_ex_plot.Rda")
+
+# Vorbereiterer Datensatz für Sonstige ausspielen
+#(nur für die 10 grössten Städte)
+data_sonstige_ex <- data_ex_plot %>%
+  select(year, city, others, population) %>%
+  filter(city %in% top_50[1:10, ]$name)
+
+write.csv(
+  data_sonstige_ex,
+  file = "output/sonstige_ex.csv",
+  fileEncoding = "UTF-8"
+)
+rm(data_sonstige_ex)
+
+# Datensatz mit Aufschlüsselung "sonstiger" Parteien einlesen
+#(nur für die 10 grössten Städte)
+data_ex_plot2 <- read_excel("input/sonstige_ex.xlsx") %>%
+  # wandle Jahr in korrekten Datentyp um
+  mutate(year = as.numeric(year)) %>%
+  # ersetze alle NAs durch nullen (in allen Spalten)
+  mutate_all(funs(replace(., is.na(.), 0))) %>%
+  select(year, city, AL:Pop) %>%
+  right_join(
+    data_ex_plot,
+    by = c("city", "year")
+  ) %>%
+  select(year, city, population, bfs_id, Alle:others, AL:Pop, Linke:Sonstige)
+
+# Einzelne Parteien einem politischen Lager zuordnen
+data_ex_plot2 %<>%
+  mutate(Linke = as.numeric(SPS) +
+    as.numeric(GPS) +
+    as.numeric(PDA.y) +
+    as.numeric(PDA.x) +
+    as.numeric(AL) +
+    as.numeric(Solidarite) +
+    as.numeric(DSP) +
+    as.numeric(GB) +
+    as.numeric(CSP) +
+    as.numeric(JungesBern) +
+    as.numeric(LinkeSonstiges) +
+    as.numeric(Pop)) %>%
+  mutate(Mitte = as.numeric(CVP) +
+    as.numeric(EVP) +
+    as.numeric(BDP) +
+    as.numeric(LDU.y) +
+    as.numeric(LDU.x) +
+    as.numeric(GLP)) %>%
+  mutate(Rechte = as.numeric(SVP) +
+    as.numeric(FDP) +
+    as.numeric(LPS) +
+    as.numeric(FPS.y) +
+    as.numeric(FPS.x) +
+    as.numeric(LEGA) +
+    as.numeric(LP) +
+    as.numeric(MCR) +
+    as.numeric(BielerVolk) +
+    as.numeric(Biel) +
+    as.numeric(SD)) %>%
+  mutate(Sonstige = as.numeric(Alle) - Linke - Rechte - Mitte) %>%
+  select(year, 
+         city, 
+         population, 
+         Alle, 
+         Linke, 
+         Mitte, 
+         Rechte, 
+         Sonstige) %>%
+  filter(!is.na(Sonstige)) %>%
+  gather(
+    lager,
+    sitze,
+    Linke:Sonstige
+  ) %>%
+  mutate(
+    anteil = as.numeric(sitze) / as.numeric(Alle) * 100,
+    lager = factor(lager, levels = lager_levels)
+  )
+
+# Plot generieren
+plot <- ggplot(data_ex_plot2, aes(x = year, 
+                                  y = anteil,
+                                  fill = lager)) +
+  geom_area(position = "stack") +
+  labs(x = "Jahr",
+       y = "Anteil",
+       title = "Exekutive: Sitzverteilung in den 10 grössten Städte\n(Kleinstparteien kategorisiert)") +
+  facet_wrap(~reorder(city, -population)) +
+  scale_fill_manual(values = lager_colors) +
+  theme_minimal()
+plot
+
+# Plot speichern
+ggsave("output/plot_exekutive02.pdf",
+       width = 10,
+       height = 8)
+
+```
+
+
+
+### Plot 3: Grösse der Stadt und Anteil der linken Parteien an der Stadtregierung
+
+Vieles deutet daraufhin, dass linke Parteien vor allem in Regierungen grosser Städte stark sind.
+
+```{r}
+
+# Jahr und politisches Lages auswählen
+data_ex_plot3 <- anti_join(data_ex_plot1,
+                           data_ex_plot2,
+                           by = c("year",
+                                  "city",
+                                  "Alle",
+                                  "population",
+                                  "lager"))
+data_ex_plot3 %<>%
+  bind_rows(data_ex_plot2)
+
+data_ex_plot4 <- subset(data_ex_plot3,
+                        year == 2017 & lager == "Linke")
+
+# Plot generieren
+plot <- ggplot(data_ex_plot4,
+               aes(x = population,
+                   y = anteil)) +
+  geom_point() +
+  scale_x_continuous(trans = "log2") +
+  labs(y = "Anteil der SP und Grünen in Prozent",
+       x = "Population (log)",
+       title = "Je grösser die Stadt, desto stärker links die Regierung") +
+  theme_minimal()
+plot
+
+#Plot speichern
+ggsave("output/plot_exekutive03.pdf",
+       width = 10,
+       height = 8)
+```
+
+
+### Plot 4: Sitzverteilung in den 10 grössten Schweizer Städten (ungewichtet, mit Kleinstparteien)
+
+
+```{r}
+# Städte nach Grösse sortieren
+order <- data_ex_plot %>%
+  distinct(city, .keep_all = TRUE) %>%
+  arrange(desc(population)) %>%
+  select(city) %>%
+  unlist()
+
+# Datensatz
+data_ex_plot7 <- data_ex_plot3
+
+data_ex_plot7 %<>%
+  filter(city %in% order[1:10]) %>%
+  spread(lager, anteil) %>%
+  group_by(year) %>% 
+  summarise(
+      Linke = mean(Linke, na.rm = TRUE),
+      Mitte = mean(Mitte, na.rm = TRUE),
+      Rechte = mean(Rechte, na.rm = TRUE),
+      Sonstige = mean(Sonstige, na.rm = TRUE)) %>% 
+  gather(
+    lager,
+    anteil,
+    2:5)
+
+# Plot generieren
+plot <- ggplot(data_ex_plot7,
+               aes(x = year,
+                   y = anteil,
+                   color = lager)) +
+  geom_line() +
+  labs(y = "Anteil in Prozent",
+       x = "Jahr",
+       title = "Exekutive: Die 10 grössten Städte\n(ungewichtet, Kleinstparteien kategorisiert)") +
+  theme_minimal()
+plot
+
+#Plot speichern
+ggsave("output/plot_exekutive04.pdf", 
+       width = 10,
+       height = 8)
+
+```
+
+
+
+# Legislative
+
+### Daten einlesen
+
+Es wird ein Datensatz namens "data_leg_raw" erstellt, der die (ungesäuberten) Rohdaten für die Stadtparlamente (Legislative) beinhaltet. Der Datensatz wird anschliessend im Ordner "Output" als Rda gespeichert. 
+
+```{r}
+amt <- "Legislative"
+data_leg_raw <- data.frame()
+
+### Datenstruktur 1: 1993-1998
+temp <- c(1993:1998)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 1,
+    range = anchored("B11", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:3, 5, 7, 9, 11:13, 15:17, 19) %>%
+    filter(!is.na(.[[2]]) &
+      !.[[1]] == "davon Frauen" &
+      !.[[1]] == "dont femmes") %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+
+### Datenstruktur 2: 1999
+temp <- c(1999)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 1,
+    range = anchored("B11", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:3, 5, 7, 9, 11:13, 15:17, 19) %>%
+    filter(!is.na(.[[2]]) &
+      !.[[1]] == "davon Frauen" &
+      !.[[1]] == "dont femmes") %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 3: 2000
+temp <- c(2000)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 1,
+    range = anchored("A5", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) %>%
+    filter(!is.na(.[[2]]) &
+      !.[[1]] == "davon Frauen" &
+      !.[[1]] == "dont femmes") %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 4: 2001-2004
+temp <- c(2001:2004)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 1,
+    range = anchored("B11", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:3, 5, 7, 9, 11:12, 14:16, 18) %>%
+    filter(!is.na(.[[2]]) &
+      !.[[1]] == "davon Frauen" &
+      !.[[1]] == "dont femmes") %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 5: 2005-2008
+temp <- c(2005:2008)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 4, 6, 8, 10, 12, 14, 16, 18) %>%
+    filter(!is.na(.[[2]]))  %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRD",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      LPS = "LPS / PLS",
+      EVP = "EVP / PEP",
+      GPS = "GPS / PES",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+
+### Datenstruktur 6: 2009
+temp <- c(2009)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xls",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A9", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 4, 6, 8, 10, 12, 14, 16, 18, 20) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRL",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 7: 2010-2011
+temp <- c(2010:2011)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 4, 6, 8, 10, 12, 14, 16, 18, 20) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PRD",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 8: 2012
+temp <- c(2012)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 4, 6, 8, 10, 12, 14, 16, 18, 20) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PLR",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 9: 2013
+temp <- c(2013)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 1,
+    range = anchored("A1", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 4, 6, 8, 10, 12, 14, 16, 18, 20) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PLR",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+### Datenstruktur 10: 2014
+temp <- c(2014)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 5, 7, 9, 11, 13, 15, 17, 19, 21) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PLR",
+      CVP = "CVP / PDC",
+      SPS = "SPS / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEP",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL",
+      other = "Übrige Parteien / Autres partis"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+
+### Datenstruktur 11: 2015
+temp <- c(2015)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 2,
+    range = anchored("A10", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 5, 7, 9, 11, 13, 15, 17, 19) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PLR",
+      CVP = "CVP / PDC",
+      SPS = "SP / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEV",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL"
+    ) %>%
+    slice(2:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+
+### Datenstruktur 12: 2016-2017
+temp <- c(2016:2018)
+for (i in temp) {
+  loop <- read_excel(
+    paste(
+      "input/ssv/Politdaten_",
+      i,
+      ".xlsx",
+      sep = ""
+    ),
+    sheet = 1,
+    range = anchored("A3", dim = c(NA, NA))
+  )
+  loop %<>%
+    select(1:2, 5, 7, 9, 11, 13, 15, 17, 19) %>%
+    filter(!is.na(.[[2]])) %>%
+    rename(
+      Alle = "Alle Parteien / Ensemble des partis",
+      FDP = "FDP / PLR",
+      CVP = "CVP / PDC",
+      SPS = "SP / PS",
+      SVP = "SVP / UDC",
+      EVP = "EVP / PEV",
+      BDP = "BDP / PBD",
+      GPS = "GPS / PES",
+      GLP = "GLP / PVL"
+    ) %>%
+    slice(3:n()) %>%
+    mutate(year = i, amt = amt)
+  data_leg_raw %<>%
+    bind_rows(loop)
+}
+
+#Das File Roh
+save(data_leg_raw, file = "output/data_leg_raw.Rda")
+
+rm(loop)
+```
+
+### Daten säubern
+
+Es wird ein Datensatz namens "data_leg" erstellt, der die gesäuberten Daten für die Stadtparlamente (Legislative) beinhaltet. Der Datensatz wird anschliessend im Ordner "Output" als Rda gespeichert. 
+
+```{r}
+
+load("output/data_leg_raw.Rda")
+
+# Bereich auswählen und Variable benennen
+data_leg <- data_leg_raw %>%
+  select(14, 1, 15, 2:13, 17, 16:21) %>%
+  rename(city = X__1) %>%
+  mutate(city = paste(.[[2]],
+                      .[[16]],
+                      .[[18]],sep=""),
+    city = str_replace_all(city, "NA", "")) %>%
+  select(1, 18, 3:15, 17, 19:21)
+
+# Base version:
+data_leg[data_leg == "-"] <- 0
+data_leg[data_leg == "–"] <- 0
+data_leg[is.na(data_leg)] <- 0
+data_leg[data_leg == "…"] <- 0
+data_leg[data_leg == ""] <- 0
+data_leg[data_leg == "."] <- 0
+data_leg[data_leg == "..."] <- 0
+
+# Fussnoten entfernen
+data_leg %<>%
+  mutate(
+    FDP = str_replace_all(FDP, " #[^[:alpha:]]+", " "),
+    CVP = str_replace_all(CVP, " #[^[:alpha:]]+", " "),
+    SPS = str_replace_all(SPS, " #[^[:alpha:]]+", " "),
+    SVP = str_replace_all(SVP, " #[^[:alpha:]]+", " "),
+    LDU = str_replace_all(LDU, " #[^[:alpha:]]+", " "),
+    LPS = str_replace_all(LPS, " #[^[:alpha:]]+", " "),
+    EVP = str_replace_all(EVP, " #[^[:alpha:]]+", " "),
+    SD = str_replace_all(SD, " #[^[:alpha:]]+", " "),
+    GPS = str_replace_all(GPS, " #[^[:alpha:]]+", " "),
+    FPS = str_replace_all(FPS, " #[^[:alpha:]]+", " "),
+    BDP = str_replace_all(BDP, " #[^[:alpha:]]+", " "),
+    GLP = str_replace_all(GLP, " #[^[:alpha:]]+", " "),
+    other = str_replace_all(other, " #[^[:alpha:]]+", " "),
+    Alle = str_replace_all(Alle, " #[^[:alpha:]]+", " "),
+    city = str_replace_all(city, " ", ""),
+    city = str_replace_all(city, "#[^[:alpha:]]+", ""),
+    city = str_replace_all(city, "([^[:alpha:]])", "")
+  )
+
+# Leere Zeilen löschen
+data_leg %<>% filter(!Alle == 0)
+
+#others berechnen
+data_leg %<>%
+  mutate(others = as.numeric(.[[15]]) + as.numeric(.[[17]])) %>%
+  select(-15,-17)
+
+# Schreibweise vereinheitlichen
+data_leg %<>%
+  mutate(city = str_replace_all(city, "[^[:alpha:]]", " "))
+
+# Ersetze seltsame Gemeindenamen durch schönere
+data_leg %<>%
+  beautify_municipality_names()
+
+# Summe überprüfen
+data_leg %<>%
+  mutate(all = as.numeric(FDP) +
+    as.numeric(CVP) +
+    as.numeric(SPS) +
+    as.numeric(SVP) +
+    as.numeric(LDU) +
+    as.numeric(LPS) +
+    as.numeric(EVP) +
+    as.numeric(SD) +
+    as.numeric(PDA) +
+    as.numeric(GPS) +
+    as.numeric(FPS) +
+    as.numeric(BDP) +
+    as.numeric(GLP) +
+    as.numeric(others)) %>%
+  mutate(diff = as.numeric(Alle) - all) %>%
+  mutate(others = others + diff) %>%
+  select(-diff, -all) 
+
+data_leg %<>% 
+  filter(!city == "AlleTous",
+         !city == "SchweizSuisse")
+
+save(data_leg, file = "output/data_leg.Rda")
+```
+
+
+### Plots vorbereiten
+
+Die Daten werden für die Plots vorbereitet. U.a. werden die einzelnen Parteien einem Lager (Links, Rechts, Mitte) zugeteilt. Der Datensatz wird anschliessend im Ordner "Output" als "data_leg_plot.Rda" gespeichert. 
+
+```{r}
+load("output/data_leg.Rda")
+
+# Um Einwohnerzahl ergänzen
+data_leg_plot <- data_leg %>%
+  left_join(bfs_municipalities, by = c("city" = "name"))
+
+# Einzelne Parteien einem politischen Lager zuordnen
+data_leg_plot %<>%
+  mutate(Linke = as.numeric(SPS)
+  + as.numeric(GPS)
+  + as.numeric(PDA)) %>%
+  mutate(Mitte = as.numeric(CVP)
+  + as.numeric(EVP)
+  + as.numeric(BDP)
+  + as.numeric(LDU)
+  + as.numeric(GLP)) %>%
+  mutate(Rechte = as.numeric(SVP)
+  + as.numeric(FDP)
+  + as.numeric(LPS)
+  + as.numeric(FPS)
+  + as.numeric(SD)) %>%
+  mutate(Sonstige = as.numeric(Alle) - Linke - Rechte - Mitte)
+
+# Datensatz für Plot 3 speichern
+save(data_leg_plot, file = "output/data_leg_plot.Rda")
+```
+
+
+### Plot 1: Sitzverteilung in den 50 grössten Schweizer Städten
+
+```{r}
+load("output/data_leg_plot.Rda")
+
+# Datensatz transformieren
+data_leg_plot1 <- data_leg_plot
+
+data_leg_plot1 %<>%
+  select(year, city, population, Alle, Linke:Sonstige) %>%
+  gather(
+    lager,
+    sitze,
+    Linke:Sonstige
+  )
+
+# Sitzanteile berechnen
+data_leg_plot1 %<>%
+  mutate(
+    anteil = as.numeric(sitze) / as.numeric(Alle) * 100,
+    lager = factor(lager, levels = lager_levels)
+  )
+
+# Plot generieren
+plot <- ggplot(data_leg_plot1 %>%
+    filter(city %in% top_50$name),
+               aes(x = year,
+                   y = anteil,
+                   fill = lager)) +
+  geom_area(position = "stack") +
+  labs(x = "Jahr",
+       y = "Anteil",
+       title = "Legislative: Sitzverteilung in den 50 grössten Städte\n(Kleinstparteien nicht kategorisiert)") +
+  facet_wrap(~reorder(city, -population)) +
+  scale_fill_manual(values = lager_colors) +
+  theme_minimal()
+plot
+
+# Plot speichern
+ggsave("output/plot_legislative01.pdf",
+       width = 10,
+       height = 8)
+```
+
+### Plot 2: Sitzverteilung in den 10 grössten Schweizer Städten (ungewichtet, mit Kleinstparteien)
+
+```{r}
+load("output/data_leg_plot.Rda")
+
+# Vorbereiterer Datensatz für Sonstige ausspielen (nur für die 10 grössten Städte). Für die 10 grössten Städte werden die Kategorie "Sonstige" manuell in einem Excel-File aufgeschlüsselt.
+data_sonstige_leg <- data_leg_plot %>%
+  select(year, city, others, population) %>%
+  filter(city %in% order[1:10]) %>%
+  write.csv(file = "output/sonstige_leg.csv",
+            fileEncoding = "UTF-8")
+
+rm(data_sonstige_leg)
+
+# Das manuell erarbeitete File (nur für die 10 grössten Städte) wird nun eingelesen und mit dem bestehenden Datensatz data_leg_plot2 gemerged.
+data_leg_plot2 <-
+  read_excel("input/sonstige_leg.xlsx") %>%
+  select(-diff) %>%
+  # wandle Jahr in korrekten Datentyp um
+  mutate(year = as.numeric(year)) %>%
+  # ersetze alle NAs durch nullen (in allen Spalten)
+   right_join(
+    data_leg_plot,
+    by = c("city", "year")
+  ) %>%
+  select(year, city, amt, population, Alle,
+         Rechte.x:Sonstige.x, Linke.y:Sonstige.y) %>%
+  mutate_all(funs(replace(., is.na(.), 0)))
+
+# Die neuen Anteile der politischen Lager berechnen
+data_leg_plot2 %<>%
+  mutate(Linke = Linke.y + Linke.x,
+         Mitte = Mitte.y + Mitte.x,
+         Rechte = Rechte.y + Rechte.x,
+         Sonstige = Sonstige.y - Linke.x - Mitte.x - Rechte.x) %>%
+  select(year:population, Alle, Linke:Sonstige) %>%
+  gather(
+    lager,
+    sitze,
+    Linke:Sonstige
+  ) %>%
+  mutate(
+    anteil = as.numeric(sitze) / as.numeric(Alle) * 100,
+    lager = factor(lager, levels = lager_levels)
+  )
+
+#Die 50 grössten Städte auswählen und Datensatz für späteren Plot speichern
+data_leg_plot2 %<>%
+  filter(city %in% order[1:50])
+data_leg_plot3 <- data_leg_plot2
+data_leg_plot4 <- data_leg_plot2
+data_leg_plot5 <- data_leg_plot2
+
+#Plot generieren
+data_leg_plot2 %<>%
+  filter(city %in% order[1:10]) %>%
+  spread(lager, anteil) %>%
+  group_by(year) %>% 
+  summarise(
+      Linke = mean(Linke, na.rm = TRUE),
+      Mitte = mean(Mitte, na.rm = TRUE),
+      Rechte = mean(Rechte, na.rm = TRUE),
+      Sonstige = mean(Sonstige, na.rm = TRUE)) %>% 
+  gather(
+    lager,
+    anteil,
+    Linke:Sonstige)
+
+# Plot generieren
+plot <- ggplot(data_leg_plot2,
+               aes(x = year,
+                   y = anteil,
+                   color = lager)) +
+  geom_line() +
+  labs(y = "Anteil in Prozent",
+       x = "Jahr",
+       title = "Legislative: Die 10 grössten Städte\n(ungewichtet, Kleinstparteien kategorisiert)") +
+  theme_minimal()
+plot
+
+#Plot speichern
+ggsave("output/plot_legislative02.pdf",
+       width = 10,
+       height = 8)
+
+```
+
+
+# Visualisierungen
+
+Für die Visualisierung könnte es spannend sein, die Städte in einige wenige Kategorien zu untereteilen. Ein Ansatz wäre eine Art «Median». Wäre ein Stadtrat aus 2 Linken, 2 Mittigen und 3 Rechten zusammengesetzt, wäre der Median die Person in der Mitte: z.B. Links | Links | Mitte | **Mitte** | Rechts | Rechts | Rechts. Die Schwierigkeit ist hier naturgemäss die Gruppe «Sonstige». Wo reiht sie sich ein in dieser Idee?
+
+```{r add median (angelo)}
+
+data_ex_plot %<>%
+  rowwise() %>%
+  # wiederhole die Wörter Linke, Mitte, Rechte für jeden Sitz ein Mal
+  mutate(median = c(
+    rep("Linke", times = Linke),
+    rep("Mitte", times = Mitte),
+    rep("Sonstige", times = Mitte),
+    rep("Rechte", times = Rechte)
+  # und behalte dann nur jenen in der Mitte
+  )[ceiling((Linke + Mitte + Sonstige + Rechte) / 2)])
+
+```
+
+```{r test visualisation, fig.height=3, fig.width=7}
+
+# sort by size
+order <- data_ex_plot %>%
+  distinct(city, .keep_all = TRUE) %>%
+  arrange(desc(population)) %>%
+  select(city) %>%
+  unlist()
+
+all_years <- seq(
+  min(data_ex_plot$year),
+  max(data_ex_plot$year),
+  1
+)
+
+data_ex_plot %<>%
+  mutate(
+    city = factor(city, levels = order)
+  )
+
+ggplot(
+  data = data_ex_plot %>%
+    # show biggest at top
+    mutate(
+      city = factor(city, levels = rev(levels(city)))
+    ) %>%
+    filter(
+      # reduce to biggest 10
+      city %in% order[1:10]
+    ),
+  aes(
+    x = year,
+    y = city,
+    colour = median
+  )
+) +
+  geom_point(shape = 19, size = 4) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_continuous(breaks = all_years) +
+  scale_colour_manual(values = c(
+    "Linke" = "#f1434a",
+    "Mitte" = "#b8b8b8",
+    "Sonstige" = "#27A1A6",
+    "Rechte" = "#d9d9d9"
+  ))
+
+
+```
+
+Das Modell ist definitiv nicht das präzistest-mögliche! Es ergeben sich ganz konkret beispielsweise folgende Verzerrungen zugunsten der Linken/Mitte:
+
+- Renens, 1996: 3 Linke, 3 Rechte => Median = Linke
+- LaChauxdeFonds, 1997: 2 Linke, 1 Sonstige, 2 Rechte => Median = Sonstige
+- Dübendorf, 1998: 1 Linke, 2 Mitte, 3 Sonstige, 3 Rechte => Median = Sonstige
+- StGallen, 2017: 2 Linke, 1 Mitte, 1 Sonstige, 1 Rechts => Median = Mitte
+- Biel, 2006: 4 Linke, 2 Sonstige, 2 Rechte => Median = Linke
+- Luzern, 2007: 2 Linke, 1 Mitte, 1 Sonstige, 1 Rechte => Median = Mitte
+
+Ein kurzes Wort zu **Luzern**: 2012 trat der parteilose Stadtpräsident und Bildungsdirektor Urs W. Studer (62) nach 16 Jahren im Amt zurück. Die NLZ schreibt: «In den 16 Jahren als Stadtpräsident hat der parteilose Studer Luzern geprägt. Aufgefordert, seine grössten Erfolge zu benennen, gibt sich der frühere liberale Grossrat, der mit der Stadtpräsidentenwahl 1996 aus seiner Partei ausgetreten war, bescheiden und spricht zuerst von seinem Stapi-Vorgänger Franz Kurzmeyer. «Ich gelte ja als sein politischer Ziehsohn», sagt Studer und erklärt: «Wir haben die gleiche Philosophie. Liberal bedeutet ein starkes Gemeinwesen, einen sozialen Staat.» 
+
+Ein kurzes Wort zu **St.Gallen**: 2013/14 ist die Linke tatsächlich aus der Regierung geflogen. Danach konnte sie 2015 und 2017 Sitze zurückerobern. 2017 ging ausserdem ein Sitz von der CVP an die GLP. Die Person der GLP (Sonja Lüthi) wird von [Smartvote](https://smartvote.ch/15_ch_nr/smartmap/candidates) Links der Mitte eingeordnet. Als Mitglied der GLP ist sie in Umweltfragen grün, in Finanzfragen eher der FDP nah. Seit 2013 ist ausserdem ein Parteiloser Mitgleid der Exekutive. Er war politisch nicht aktiv vor seiner Wahl, was seine Verortung sehr schwer macht.
+
+Ein kurzes Wort zu **Biel**: Die Stadt hatte wärend den Jahren 2005 bis 2013 tatsächlich 8 Mitglieder. Was zunächst wie ein Fehler aussieht, ist Konzept. So schrieb der Bund über die Reform: «Nach dem Willen des Gemeinderats zählt die Bieler Stadtregierung ab nächster Legislatur (ab 2014) wie in den meisten Schweizer Städten nur noch fünf statt acht Mitglieder. Heute leiten nur die vier hauptamtlichen Gemeinderäte eine Direktion. Die vier nebenamtlichen führen keine Dossiers, sind aber gleichermassen stimmberechtigt.» «Bei Pattsituationen konnte der Stadtpräsident den Stichentscheid fällen.» «Der mit acht Mitgliedern für eine Stadt sehr grosse Gemeinderat war bisher Garant dafür, dass die französischsprachige Minderheit eine angemessene Vertretung erhielt.» Die zwei Sonstigen die 2006 in Biel eingetragen sind, waren Mitglieder der stark rechten FPS (ehemals Autopartei). Es war also 4 Links gegen 4 Rechts (2 davon FDP).
+
+Eine detailliertere Ansicht pro Stadt könnte eventuell zusätzliche Informationen liefern:
+
+```{r detail view, fig.height=3, fig.width=6}
+
+# filter
+one_city_only <- data_ex_plot %>%
+  filter(city == "Biel/Bienne") %>%
+  arrange(year)
+
+max_seats <- max(as.numeric(one_city_only$Alle))
+
+# make list of vectors of repeated words
+one_city_only %<>%
+  split(1:nrow(one_city_only)) %>%
+  map(function(row) {
+    # because we can not create a data frame with unequal vector lengths
+    # we need to fill them up with NAs
+    fill_with_NA <- rep(
+      NA,
+      max_seats - row$Linke - row$Mitte - row$Rechte - row$Sonstige
+    )
+    c(
+      rep("Linke", times = row$Linke),
+      rep("Mitte", times = row$Mitte),
+      rep("Sonstige", times = row$Sonstige),
+      rep("Rechte", times = row$Rechte),
+      fill_with_NA
+    )
+  }) %>%
+  # convert to data frame
+  as.data.frame()
+
+# re assign years as column names
+names(one_city_only) <- t(data_ex_plot %>%
+  distinct(year) %>%
+  arrange(year))
+
+# make tidy 
+one_city_only %<>%
+  gather(year, seat) %>%
+  mutate(
+    # convert to factor with specific order (levels)
+    seat = factor(seat, levels = c(lager_levels, "Vakant")),
+    # convert to correct data type
+    year = as.numeric(year)
+  ) %>%
+  group_by(year) %>%
+  mutate(
+    n = row_number()
+  ) %>%
+  ungroup()
+
+ggplot(
+  data = one_city_only,
+  aes(
+    x = year,
+    y = n,
+    colour = seat
+  )
+) +
+  geom_point(shape = 19, size = 4) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_continuous(breaks = all_years) +
+  scale_colour_manual(values = c(lager_colors, "#EFEFEF")) +
+  labs(
+    y = "",
+    x = ""
+  )
+
+```
+
+
+
+## Links = rot, Rest = blau
+
+Wenn wir zurück auf den Gegensatz Links vs. alle anderen kommen, dann könnte man auch die Prozentwerte der linken Parteien auf einer divergierenden Farbskala abbilden:
+
+
+##### Exekutive
+
+```{r new visualisation with diverging color scale, fig.height=3, fig.width=7}
+
+data_ex_plot_blue_red <- data_ex_plot2 %>%
+  ungroup() %>%
+  filter(
+    # reduce to biggest 10 and only left values
+    city %in% order[1:10] & lager == "Linke"
+  ) %>%
+  mutate(
+    city = factor(city, levels = rev(order))
+  )
+
+ggplot(
+  data_ex_plot_blue_red,
+  aes(
+    x = year,
+    y = city,
+    color = anteil
+  )
+) +
+  geom_point(shape = 15, size = 6) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_colour_distiller(
+    palette = "RdBu",
+    limits = c(0, 100),
+    values = c(0, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 1)
+  ) +
+  scale_x_continuous(breaks = all_years) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Linke vs. Rest: Wer regiert die Stadt?",
+    color = "Links (rot)"
+  )
+
+```
+
+Dies hat den Vorteil, dass man stark links regierte Städte klar erkennt an ihrer dunkelroten Farbe und auch Lugano / Luzern / St.Gallen fallen auf mit ihrem blau, was inhaltlich durchaus Sinn ergibt.
+
+#### Legislative
+
+```{r diverging scale with legislative data}
+
+data_leg_plot_blue_red <- data_leg_plot1 %>%
+  filter(
+    # reduce to biggest 10 and only left values
+    city %in% order[1:10] & lager == "Linke"
+  ) %>%
+  mutate(
+    city = factor(city, levels = rev(order))
+  )
+
+ggplot(
+  data_leg_plot_blue_red,
+  aes(
+    x = year,
+    y = city,
+    color = anteil
+  )
+) +
+  geom_point(shape = 15, size = 6) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_colour_distiller(
+    palette = "RdBu",
+    limits = c(0, 100),
+    values = c(0, 0.35, 0.45, 0.48, 0.5, 0.52, 0.55, 0.65, 1)
+  ) +
+  scale_x_continuous(breaks = all_years) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Linke vs. Rest: Wer parliert die Stadt?",
+    color = "Links (rot)"
+  )
+
+
+```
+
+Teilweise finden wir in den Daten abrupte Veränderungen auch innerhalb einer Legislaturperiode.
+Hier als Referenz, welche Legislaturperioden in den verschiedenen Städten gelten:
+
+- Bern: 2014 - 2018
+
+Die auffälligste Veränderung ist jene in Bern in den Jahren 2013 und 14. Sie ist auf eine nicht einheitliche Einteilung der Grünen zurückzuführen. Während 2012 und ab 2015 die verschiedenen Grünen Listen als Grüne aufgelistet werden, werden sie in diesen zwei Jahren z. T. als andere gelistet.
+
+#### Aargau Solothurn
+
+##### Exekutive
+
+```{r aargau solothurn}
+
+data_ex_plot_ag_so <- data_ex_plot1 %>%
+  filter(
+    # reduce to biggest 10 and only left values
+    city %in% order_ag_so & lager == "Linke"
+  ) %>%
+  mutate(
+    city = factor(city, levels = rev(order_ag_so))
+  )
+
+ggplot(
+  data_ex_plot_ag_so,
+  aes(
+    x = year,
+    y = city,
+    color = anteil
+  )
+) +
+  geom_point(shape = 15, size = 6) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_colour_distiller(
+    palette = "RdBu",
+    limits = c(0, 100),
+    values = c(0, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 1)
+  ) +
+  scale_x_continuous(breaks = all_years) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Linke vs. Rest: Wer regiert in Aargau und Solothurn?",
+    color = "Links (rot)"
+  )
+
+```
+
+#### Legislative
+
+```{r aargau solothurn legislative}
+
+data_leg_plot_ag_so <- data_leg_plot1 %>%
+  filter(
+    # reduce to biggest 10 and only left values
+    city %in% order_ag_so & lager == "Linke"
+  ) %>%
+  mutate(
+    city = factor(city, levels = rev(order_ag_so))
+  )
+
+ggplot(
+  data_leg_plot_ag_so,
+  aes(
+    x = year,
+    y = city,
+    color = anteil
+  )
+) +
+  geom_point(shape = 15, size = 6) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_colour_distiller(
+    palette = "RdBu",
+    limits = c(0, 100),
+    values = c(0, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 1)
+  ) +
+  scale_x_continuous(breaks = all_years) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Linke vs. Rest: Wer parliert in Aargau und Solothurn?",
+    color = "Links (rot)"
+  )
+
+```
+
+```{r aargau solothurn area}
+
+ggplot(
+  data_leg_plot1 %>%
+    filter(city %in% order_ag_so),
+  aes(
+    x = year,
+    y = anteil,
+    fill = lager
+  )
+) +
+  geom_area(position = "stack") +
+  labs(
+    x = "Jahr",
+    y = "Anteil",
+    title = "Legislative: Sitzverteilung in Aargau Solothurn"
+  ) +
+  facet_wrap(~reorder(city, -population)) +
+  scale_fill_manual(values = lager_colors) +
+  theme_minimal()
+
+```
+
+
+
+## Linting
+
+Der Code in diesem RMarkdown wird mit [lintr](https://github.com/jimhester/lintr) automatisch auf den Wickham'schen [tidyverse style guide](http://style.tidyverse.org/) überprüft. 
+
+```{r linting}
+lintr::lint(
+  "main.Rmd", linters =
+    lintr::with_defaults(
+      commented_code_linter = NULL,
+      trailing_whitespace_linter = NULL
+    )
+)
+# lintr::lint("scripts/my_script.R", linters =
+#               lintr::with_defaults(
+#                 commented_code_linter = NULL,
+#                 trailing_whitespace_linter = NULL
+#                 )
+#             )
+```
+
