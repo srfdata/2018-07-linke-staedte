@@ -25,10 +25,10 @@ r_version <- "3.4.4"
 
 ## Vorbemerkungen
 
-Dieses Dokument beschreibt die Vorprozessierung und explorative Analyse des Datensatzes, der Grundlage des auf srf.ch veröffentlichten Artikel [So stark rückten die Schweizer Städte nach links](https://www.srf.ch/news/schweiz/urbaner-linksrutsch-so-stark-rueckten-die-schweizer-staedte-nach-links) ist.
+Dieses Dokument beschreibt die Vorprozessierung und explorative Analyse des Datensatzes, der Grundlage des auf srf.ch veröffentlichten Artikel [So stark sind die Schweizer Städte nach links gerückt](https://www.srf.ch/news/schweiz/urbaner-linksrutsch-so-stark-sind-die-schweizer-staedte-nach-links-gerueckt) ist.
 
 SRF Data legt Wert darauf, dass die Datenvorprozessierung und -Analyse nachvollzogen und überprüft werden kann. SRF Data glaubt an das Prinzip offener Daten, aber auch offener und nachvollziehbarer Methoden. Zum anderen soll es Dritten ermöglicht werden, auf dieser Vorarbeit aufzubauen und damit weitere Auswertungen oder Applikationen zu generieren.  
-2018-07-linke-staedte
+
 Für die vorliegende Analyse erhielt SRF Data vom [Schweizer Städteverband](https://staedteverband.ch/) Daten zur Sitzverteilung in den Exekutiven und Legislativen der grossen Schweizer Städte. In diesem Script werden diese Daten zusammengeführt und entlang folgender Fragestellung ausgewertet: "Wie verschob sich das politische Kräfteverhältnis in den grossen Schweizer Städten in den vergangenen 25 Jahren?".
 
 Die Endprodukte des vorliegenden Scripts, neben der vorliegenden explorativen Analyse, sind (Datenbeschreibung siehe unten):

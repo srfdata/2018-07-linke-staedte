@@ -2,7 +2,7 @@
 
 ## Artikel
 
-Die Daten und Methoden in diesem Repository beziehen sich auf den Artikel [So stark rückten die Schweizer Städte nach links](https://www.srf.ch/news/schweiz/urbaner-linksrutsch-so-stark-rueckten-die-schweizer-staedte-nach-links), publiziert am 25. Juli 2018. 
+Die Daten und Methoden in diesem Repository beziehen sich auf den Artikel [So stark sind die Schweizer Städte nach links gerückt](https://www.srf.ch/news/schweiz/urbane-regierungen-so-stark-sind-die-schweizer-staedte-nach-links-gerueckt), publiziert am 25. Juli 2018. 
 
 ## Beschreibung
 
