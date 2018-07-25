@@ -1096,7 +1096,7 @@ write.csv(
 rm(data_sonstige_ex)
 
 # Datensatz mit Aufschlüsselung "sonstiger" Parteien einlesen
-#(nur für die 10 grössten Städte)
+# (nur für die 10 grössten Städte)
 data_ex_plot2 <- read_excel("input/sonstige_ex.xlsx") %>%
   # wandle Jahr in korrekten Datentyp um
   mutate(year = as.numeric(year)) %>%
@@ -1117,7 +1117,6 @@ data_ex_plot2 %<>%
     as.numeric(PDA.x) +
     as.numeric(AL) +
     as.numeric(Solidarite) +
-    as.numeric(DSP) +
     as.numeric(GB) +
     as.numeric(CSP) +
     as.numeric(JungesBern) +
@@ -1126,6 +1125,7 @@ data_ex_plot2 %<>%
   mutate(Mitte = as.numeric(CVP) +
     as.numeric(EVP) +
     as.numeric(BDP) +
+    as.numeric(DSP) +
     as.numeric(LDU.y) +
     as.numeric(LDU.x) +
     as.numeric(GLP)) %>%
@@ -1140,15 +1140,12 @@ data_ex_plot2 %<>%
     as.numeric(BielerVolk) +
     as.numeric(Biel) +
     as.numeric(SD)) %>%
-  mutate(Sonstige = as.numeric(Alle) - Linke - Rechte - Mitte) %>%
+  mutate(Sonstige = as.numeric(Alle) - 
+           Linke - Rechte - Mitte) %>%
   select(year, 
-         city, 
-         population, 
-         Alle, 
-         Linke, 
-         Mitte, 
-         Rechte, 
-         Sonstige) %>%
+         city, population, 
+         Alle, Linke, Mitte, 
+         Rechte, Sonstige) %>%
   filter(!is.na(Sonstige)) %>%
   gather(
     lager,
